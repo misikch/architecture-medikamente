@@ -1,0 +1,126 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title MVP Архитектура системы "Медикаменте" - To-Be
+
+System_Boundary(medikamente_system, "Медицинская информационная система") {
+
+  Person(patient, "Пациент", "Записывается через портал, просматривает результаты")
+  Person(reception_staff, "Регистратор", "Управляет записями и профилями пациентов")
+  Person(medical_staff, "Медперсонал", "Ведет медкарты и назначения")
+  Person(finance_staff, "Финансист", "Обрабатывает платежи")
+
+  Container(patient_web, "Пациентский портал", "React/TypeScript", "Самозапись, просмотр анализов, личный кабинет")
+  Container(staff_web, "Портал сотрудников", "React/TypeScript", "Управление пациентами, расписанием, медкартами")
+  Container(mobile_app, "Мобильное приложение", "React Native", "Уведомления, быстрый доступ к услугам")
+
+  Container(api_gateway, "API Gateway", "Kong/Envoy", "Единая точка входа, rate limiting, аутентификация")
+  Container(auth_service, "Служба аутентификации", "OAuth2/OIDC", "JWT токены, RBAC, ABAC политики")
+  Container(patient_service, "Сервис пациентов", "Java/Spring", "Управление профилями, согласиями на обработку")
+  Container(medical_service, "Медицинский сервис", "Java/Spring", "Медкарты, назначения, диагнозы")
+  Container(appointment_service, "Сервис записи", "Java/Spring", "Расписание врачей, бронирование слотов")
+  Container(payment_service, "Платежный сервис", "Java/Spring", "Обработка платежей, интеграция с ЭРА")
+  Container(notification_service, "Сервис уведомлений", "Node.js", "SMS/Email напоминания, push-уведомления")
+  Container(audit_service, "Сервис аудита", "Java/Spring", "Логирование доступа к чувствительным данным")
+  Container(data_protection_service, "Сервис защиты данных", "Python", "Шифрование, обезличивание, тегирование")
+
+  ContainerDb(main_database, "Основная БД", "PostgreSQL", "Профили пациентов, медданные, платежи (зашифровано)")
+  ContainerDb(audit_database, "База аудита", "ClickHouse", "Неизменяемые логи доступа и операций")
+  ContainerDb(cache_store, "Кэш сессий", "Redis", "JWT токены, временные данные сессий")
+  ContainerDb(file_storage, "Файловое хранилище", "MinIO/S3", "Зашифрованные сканы документов, снимки")
+
+  System_Ext(lab_system, "Внешняя лаборатория", "API интеграция для получения результатов анализов")
+  System_Ext(payment_gateway, "Внешний платежный шлюз", "Банковские API для проведения платежей")
+  System_Ext(sms_provider, "SMS провайдер", "Внешний сервис доставки SMS")
+
+  ' Связи пользователей
+  patient --> patient_web
+  patient --> mobile_app
+  reception_staff --> staff_web
+  medical_staff --> staff_web
+  finance_staff --> staff_web
+
+  ' Web to API Gateway
+  patient_web --> api_gateway
+  staff_web --> api_gateway
+  mobile_app --> api_gateway
+
+  ' Gateway to services
+  api_gateway --> auth_service : "Проверка токенов и прав доступа"
+  api_gateway --> patient_service
+  api_gateway --> medical_service
+  api_gateway --> appointment_service
+  api_gateway --> payment_service
+  api_gateway --> notification_service
+
+  ' Service interactions
+  patient_service --> main_database
+  medical_service --> main_database
+  appointment_service --> main_database
+  payment_service --> main_database
+
+  auth_service --> cache_store
+
+  audit_service --> audit_database
+  patient_service --> audit_service : "Логирование операций с PII"
+  medical_service --> audit_service : "Логирование операций с PHI"
+  payment_service --> audit_service : "Логирование финансовых операций"
+
+  data_protection_service --> main_database : "Шифрование/дешифрование"
+  data_protection_service --> file_storage : "Защищенное хранение файлов"
+
+  notification_service --> sms_provider
+  payment_service --> payment_gateway
+  medical_service --> lab_system
+
+  ' File storage
+  patient_service --> file_storage : "Сканы документов"
+  medical_service --> file_storage : "Медицинские изображения"
+
+}
+
+note right of main_database
+**Защита данных:**
+- Шифрование PII/PHI полей на уровне БД
+- Сегментация таблиц по типам данных
+- Row-level security по пациентам
+- Автоархивирование PHI через 5 лет
+- Полное удаление по запросу пациента
+end note
+
+note left of api_gateway
+**Безопасность доступа:**
+- Все запросы авторизуются через auth_service
+- Rate limiting для предотвращения атак
+- RBAC: пациент видит только свои данные
+- ABAC: врач видит данные только своих пациентов
+- Принцип минимизации: API возвращает только необходимые поля
+end note
+
+note right of data_protection_service
+**Обработка чувствительных данных:**
+- Автоматическое тегирование PII/PHI при вводе
+- AES-256 шифрование в покое и транзите
+- Обезличивание для аналитических задач
+- Маскирование в UI (показ только части данных)
+- Контроль Data Lineage
+end note
+
+note bottom of audit_service
+**Аудит и мониторинг:**
+- Логирование всех операций с тегированными данными
+- Детектирование аномальной активности
+- Алерты при нарушениях политик доступа
+- Retention policy: хранение логов 3 года
+- Отчеты для DPO и регуляторов
+end note
+
+note right of lab_system
+**Внешние интеграции:**
+- Токенизация ID пациентов в запросах
+- Передача только минимально необходимых данных
+- Проверка Consent перед отправкой PHI
+- Контроль качества входящих данных
+end note
+
+@enduml
