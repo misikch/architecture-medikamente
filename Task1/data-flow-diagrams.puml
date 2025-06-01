@@ -1,0 +1,169 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Поток данных: Регистрация нового пациента
+
+Person(patient, "Пациент", "Обращается в клинику")
+Person(receptionist, "Регистратор", "Создает профиль клиента")
+
+Component(RegistrationFlow, "Регистрация клиента", "Бизнес-процесс", "Создание профиля и внесение в систему")
+
+ContainerDb(ExcelPatients, "Excel-реестр пациентов", "Файл", "ФИО, контакты, история. Класс: Персональные данные")
+ContainerDb(SharedDrive, "Общий диск", "Файловое хранилище", "Сканы документов, фото")
+
+patient --> RegistrationFlow : Персональная информация (класс: PII)
+receptionist --> RegistrationFlow : Ввод данных в систему
+
+RegistrationFlow --> ExcelPatients : Добавление записи (класс: PII, риск: незащищенное хранение)
+RegistrationFlow --> SharedDrive : Сохранение сканов (класс: PII, риск: общий доступ)
+
+ExcelPatients --> RegistrationFlow : Проверка дубликатов (класс: PII, риск: отсутствие аудита)
+RegistrationFlow --> patient : Карточка пациента (класс: PII, риск: печать в открытом виде)
+
+note right of ExcelPatients
+Проблемы:
+- Файл не зашифрован
+- Нет контроля версий
+- Доступ у всех сотрудников
+end note
+
+@enduml
+
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Поток данных: Медицинская консультация
+
+Person(patient, "Пациент", "Проходит обследование")
+Person(medic, "Медицинский специалист", "Ведет прием")
+
+Component(ConsultationFlow, "Медицинская консультация", "Бизнес-процесс", "Осмотр и ведение медкарты")
+
+ContainerDb(MedicalCards, "Медкарты", "Excel/PDF", "Диагнозы, рекомендации. Класс: Медицинские данные")
+ContainerDb(TestResults, "Результаты обследований", "Сканы/PDF", "Анализы, снимки. Класс: Медицинские данные")
+ContainerDb(AppointmentLog, "Журнал записей", "Excel", "Расписание, статусы. Класс: Операционные данные")
+
+patient --> ConsultationFlow : Жалобы и симптомы
+medic --> ConsultationFlow : Доступ к истории болезни
+
+MedicalCards --> ConsultationFlow : Просмотр карты (класс: PHI, риск: открытый файл)
+TestResults --> ConsultationFlow : Анализ обследований (класс: PHI, риск: нет шифрования)
+AppointmentLog --> ConsultationFlow : Проверка записи (класс: Операционные, риск: общий доступ)
+
+ConsultationFlow --> MedicalCards : Обновление диагноза (класс: PHI, риск: нет версионности)
+ConsultationFlow --> TestResults : Назначение обследований (класс: PHI, риск: нет защиты)
+ConsultationFlow --> AppointmentLog : Отметка о приеме (класс: Операционные, риск: нет аудита)
+
+ConsultationFlow --> patient : Заключение и рекомендации (класс: PHI, риск: копирование)
+
+note left of MedicalCards
+Критические проблемы:
+- Медданные в открытом виде
+- Нет разграничения доступа
+- Отсутствует аудит изменений
+end note
+
+@enduml
+
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Поток данных: Лабораторные исследования
+
+Person(patient, "Пациент", "Сдает анализы")
+Person(labtech, "Лаборант", "Обрабатывает биоматериал")
+
+Component(LabFlow, "Лабораторные исследования", "Бизнес-процесс", "Получение и обработка результатов")
+
+ContainerDb(LabRegistry, "Реестр анализов", "Excel", "ID, тип, результат. Класс: Медицинские данные")
+ContainerDb(LabScans, "Сканы результатов", "PDF/JPG", "Протоколы исследований. Класс: Медицинские данные")
+
+patient --> LabFlow : Направление на анализ (класс: PHI)
+labtech --> LabFlow : Внесение результатов
+
+LabFlow --> LabRegistry : Регистрация анализа (класс: PHI, риск: ID в открытом виде)
+LabFlow --> LabScans : Сохранение протокола (класс: PHI, риск: общее хранилище)
+
+LabRegistry --> LabFlow : Поиск по пациенту (класс: PHI, риск: полный доступ к истории)
+LabScans --> LabFlow : Получение документов (класс: PHI, риск: нет контроля доступа)
+
+LabFlow --> patient : Выдача результатов (класс: PHI, риск: передача в открытом виде)
+
+note right of LabRegistry
+Угрозы безопасности:
+- Медданные в Excel без защиты
+- Нет привязки к пациенту через ID
+- Возможность модификации задним числом
+end note
+
+@enduml
+
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Поток данных: Финансовые операции
+
+Person(patient, "Пациент", "Производит оплату")
+Person(cashier, "Кассир", "Обрабатывает платежи")
+
+Component(PaymentFlow, "Финансовые операции", "Бизнес-процесс", "Оплата услуг и ведение учета")
+
+ContainerDb(PaymentExcel, "Учет платежей", "Excel", "Сумма, услуга, дата. Класс: Финансовые данные")
+ContainerDb(OneCAccounting, "1С Бухгалтерия", "Программа", "Официальная отчетность. Класс: Финансовые данные")
+ContainerDb(CashRegister, "ККМ", "Аппарат", "Фискальные чеки. Класс: Финансовые данные")
+
+patient --> PaymentFlow : Оплата услуги
+cashier --> PaymentFlow : Проведение операции (класс: Финансовые)
+
+PaymentFlow --> PaymentExcel : Двойная запись (класс: Финансовые, риск: дублирование)
+PaymentFlow --> OneCAccounting : Синхронизация (класс: Финансовые, риск: ручной ввод)
+PaymentFlow --> CashRegister : Фискализация (класс: Финансовые)
+
+PaymentExcel --> PaymentFlow : Сверка остатков (класс: Финансовые, риск: расхождения)
+OneCAccounting --> PaymentFlow : Выгрузка данных (класс: Финансовые)
+CashRegister --> PaymentFlow : Данные чека (класс: Финансовые, риск: связка с PII)
+
+PaymentFlow --> patient : Фискальный документ (класс: Финансовые, риск: избыточные данные)
+
+note bottom of PaymentExcel
+Проблемы учета:
+- Дублирование в Excel и 1С
+- Ручная сверка данных
+- Связка платежей с персональными данными
+end note
+
+@enduml
+
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Поток данных: Аналитическая обработка
+
+Person(analyst, "Бизнес-аналитик", "Создает отчеты и модели")
+
+Component(AnalyticsFlow, "Аналитическая обработка", "Бизнес-процесс", "Извлечение знаний из накопленных данных")
+
+ContainerDb(PatientFiles, "Файлы пациентов", "Excel/Scans", "Профили клиентов. Класс: Персональные данные")
+ContainerDb(MedicalFiles, "Медицинские файлы", "Excel/PDF", "Истории болезни. Класс: Медицинские данные")
+ContainerDb(FinancialFiles, "Финансовые файлы", "Excel/1C", "Платежи и услуги. Класс: Финансовые данные")
+
+ContainerDb(JupyterNotebooks, "Jupyter блокноты", "Python", "Аналитические модели. Класс: Производные данные")
+
+PatientFiles --> AnalyticsFlow : Выгрузка профилей (класс: PII, риск: полный доступ аналитика)
+MedicalFiles --> AnalyticsFlow : Медицинская статистика (класс: PHI, риск: нет обезличивания)
+FinancialFiles --> AnalyticsFlow : Финансовые данные (класс: Финансовые, риск: связка с личностью)
+
+AnalyticsFlow --> JupyterNotebooks : Подготовка датасетов (класс: Производные, риск: хранение PII/PHI)
+JupyterNotebooks --> AnalyticsFlow : Построение моделей (класс: Производные, риск: утечка через модель)
+
+AnalyticsFlow --> analyst : P&L отчеты, ABC-анализ (класс: Производные, риск: деанонимизация)
+
+note left of JupyterNotebooks
+Нарушения приватности:
+- Аналитик имеет доступ ко всем PII/PHI
+- Нет процедур обезличивания
+- Производные данные могут содержать исходные PII
+- Отсутствует Data Lineage
+end note
+
+@enduml
